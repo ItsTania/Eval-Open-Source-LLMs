@@ -3,5 +3,7 @@ inspect-wandb[weave]
 wandb
 openai
 huggingface-hub
+transformers
+torch
 pyyaml
 python-dotenv

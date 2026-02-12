@@ -1,23 +1,22 @@
-"""Step 1: Upload open-source model weights to W&B Model Registry.
+"""Step 1: Download open-source model weights and upload to W&B Model Registry.
+
+Downloads model + tokenizer from HuggingFace, saves in a vLLM-compatible format,
+then uploads the directory to W&B as an artifact.
 
 Usage:
-    # Upload from an S3 bucket
-    python scripts/upload_weights.py --model-name Llama-3.1-8B --reference s3://my-bucket/models/llama-3.1-8b
+    # Download and upload a single model by HuggingFace repo ID
+    python scripts/upload_weights.py --hf-repo Qwen/Qwen2.5-7B-Instruct
 
-    # Upload from a GCS bucket
-    python scripts/upload_weights.py --model-name Llama-3.1-8B --reference gs://my-bucket/models/llama-3.1-8b
-
-    # Upload from an HTTP(S) URL
-    python scripts/upload_weights.py --model-name Llama-3.1-8B --reference https://example.com/models/llama-3.1-8b
-
-    # Upload from a local directory
-    python scripts/upload_weights.py --model-name Llama-3.1-8B --reference /data/models/llama-3.1-8b
+    # Specify a custom artifact name and save directory
+    python scripts/upload_weights.py --hf-repo Qwen/Qwen2.5-7B-Instruct \
+        --artifact-name qwen-2.5-7b --save-dir ./weights/qwen-2.5-7b
 
     # Upload all models defined in configs/models.yaml
     python scripts/upload_weights.py --all
 
     # Upload LoRA weights from a local directory
-    python scripts/upload_weights.py --model-name my-lora --lora-path ./lora-weights
+    python scripts/upload_weights.py --artifact-name my-lora --lora-path ./lora-weights \
+        --base-model Qwen/Qwen2.5-7B-Instruct
 """
 
 import argparse
@@ -27,70 +26,72 @@ from pathlib import Path
 import wandb
 import yaml
 from dotenv import load_dotenv
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 load_dotenv()
 
 WANDB_ENTITY = os.getenv("WANDB_ENTITY")
 WANDB_PROJECT = os.getenv("WANDB_PROJECT", "eval-os-llms")
 REGISTRY_NAME = "model"
+DEFAULT_SAVE_ROOT = Path("weights")
 
 
-_SUPPORTED_SCHEMES = ("s3://", "gs://", "http://", "https://", "file://")
+def download_and_save(hf_repo: str, save_dir: Path) -> Path:
+    """Download model + tokenizer from HuggingFace and save locally."""
+    save_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"Downloading tokenizer from {hf_repo}...")
+    tokenizer = AutoTokenizer.from_pretrained(hf_repo)
+    tokenizer.save_pretrained(save_dir)
+
+    print(f"Downloading model from {hf_repo}...")
+    model = AutoModelForCausalLM.from_pretrained(hf_repo)
+    model.save_pretrained(save_dir)
+
+    print(f"Saved to {save_dir}")
+    return save_dir
 
 
-def _validate_reference(reference: str) -> str:
-    """Validate that reference uses a supported scheme or is a local path."""
-    if any(reference.startswith(scheme) for scheme in _SUPPORTED_SCHEMES):
-        return reference
-    local_path = Path(reference)
-    if local_path.exists():
-        return str(local_path.resolve())
-    raise ValueError(
-        f"Invalid reference: {reference!r}. "
-        f"Must be a supported URI ({', '.join(_SUPPORTED_SCHEMES)}) or an existing local path."
-    )
-
-
-def upload_model(model_name: str, reference: str, entity: str, project: str) -> str:
-    """Upload a model reference (S3 or local path) to W&B Model Registry."""
-    reference = _validate_reference(reference)
-
+def upload_model(
+    artifact_name: str, save_dir: Path, hf_repo: str, entity: str, project: str
+) -> str:
+    """Upload saved model weights to W&B Model Registry."""
     run = wandb.init(
         entity=entity,
         project=project,
         job_type="upload-model",
-        config={"model_name": model_name, "reference": reference},
+        config={"artifact_name": artifact_name, "hf_repo": hf_repo},
     )
 
-    artifact = wandb.Artifact(name=model_name, type="model")
-    artifact.add_reference(reference, name=model_name)
+    artifact = wandb.Artifact(name=artifact_name, type="model")
+    artifact.add_dir(str(save_dir))
 
     logged_artifact = run.log_artifact(artifact)
     logged_artifact.wait()
 
     run.link_artifact(
         artifact=logged_artifact,
-        target_path=f"wandb-registry-{REGISTRY_NAME}/{model_name}",
+        target_path=f"wandb-registry-{REGISTRY_NAME}/{artifact_name}",
     )
 
-    print(f"Uploaded {reference} as '{model_name}' to W&B Registry")
+    print(f"Uploaded '{artifact_name}' to W&B Registry")
     run.finish()
     return logged_artifact.name
 
 
 def upload_lora_weights(
-    model_name: str, lora_path: str, base_model: str, entity: str, project: str
+    artifact_name: str, lora_path: str, base_model: str, entity: str, project: str
 ) -> str:
     """Upload LoRA weights to W&B with CoreWeave storage for inference."""
     run = wandb.init(
         entity=entity,
         project=project,
         job_type="upload-lora",
-        config={"model_name": model_name, "base_model": base_model},
+        config={"artifact_name": artifact_name, "base_model": base_model},
     )
 
     artifact = wandb.Artifact(
-        name=model_name,
+        name=artifact_name,
         type="lora",
         metadata={"wandb.base_model": base_model},
         storage_region="coreweave-us",
@@ -100,22 +101,22 @@ def upload_lora_weights(
     logged_artifact = run.log_artifact(artifact)
     logged_artifact.wait()
 
-    print(f"Uploaded LoRA weights '{model_name}' (base: {base_model}) to W&B")
+    print(f"Uploaded LoRA weights '{artifact_name}' (base: {base_model}) to W&B")
     run.finish()
     return logged_artifact.name
 
 
 def upload_all_from_config(config_path: str, entity: str, project: str):
-    """Upload all models defined in the YAML config."""
+    """Download and upload all models defined in the YAML config."""
     with open(config_path) as f:
         config = yaml.safe_load(f)
 
     for model in config["models"]:
         name = model["name"]
-        reference = model["reference"]
+        hf_repo = model["hf_repo"]
         model_type = model.get("type", "base")
 
-        print(f"\n--- Uploading {name} ({reference}) ---")
+        print(f"\n--- {name} ({hf_repo}) ---")
 
         if model_type == "lora":
             lora_path = model.get("lora_path")
@@ -125,15 +126,20 @@ def upload_all_from_config(config_path: str, entity: str, project: str):
                 continue
             upload_lora_weights(name, lora_path, base_model, entity, project)
         else:
-            upload_model(name, reference, entity, project)
+            save_dir = DEFAULT_SAVE_ROOT / name
+            download_and_save(hf_repo, save_dir)
+            upload_model(name, save_dir, hf_repo, entity, project)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Upload model weights to W&B Registry")
-    parser.add_argument("--model-name", help="Name for the W&B artifact")
-    parser.add_argument("--reference", help="Model reference: S3 (s3://), GCS (gs://), HTTP(S), file://, or local path")
+    parser = argparse.ArgumentParser(
+        description="Download HF model weights and upload to W&B Registry"
+    )
+    parser.add_argument("--hf-repo", help="HuggingFace repo ID (e.g. Qwen/Qwen2.5-7B-Instruct)")
+    parser.add_argument("--artifact-name", help="Name for the W&B artifact (defaults to repo name)")
+    parser.add_argument("--save-dir", help="Local directory to save weights (defaults to weights/<name>)")
     parser.add_argument("--lora-path", help="Path to local LoRA weights directory")
-    parser.add_argument("--base-model", help="Base model for LoRA (e.g. OpenPipe/Qwen3-14B-Instruct)")
+    parser.add_argument("--base-model", help="Base model for LoRA (e.g. Qwen/Qwen2.5-7B-Instruct)")
     parser.add_argument("--all", action="store_true", help="Upload all models from configs/models.yaml")
     parser.add_argument("--config", default="configs/models.yaml", help="Path to models config")
     parser.add_argument("--entity", default=WANDB_ENTITY, help="W&B entity/team")
@@ -145,14 +151,15 @@ def main():
     elif args.lora_path:
         if not args.base_model:
             parser.error("--base-model is required when uploading LoRA weights")
-        name = args.model_name or Path(args.lora_path).name
+        name = args.artifact_name or Path(args.lora_path).name
         upload_lora_weights(name, args.lora_path, args.base_model, args.entity, args.project)
-    elif args.reference:
-        if not args.model_name:
-            parser.error("--model-name is required when uploading a model reference")
-        upload_model(args.model_name, args.reference, args.entity, args.project)
+    elif args.hf_repo:
+        name = args.artifact_name or args.hf_repo.split("/")[-1]
+        save_dir = Path(args.save_dir) if args.save_dir else DEFAULT_SAVE_ROOT / name
+        download_and_save(args.hf_repo, save_dir)
+        upload_model(name, save_dir, args.hf_repo, args.entity, args.project)
     else:
-        parser.error("Provide --reference with --model-name, --lora-path, or --all")
+        parser.error("Provide --hf-repo, --lora-path, or --all")
 
 
 if __name__ == "__main__":
