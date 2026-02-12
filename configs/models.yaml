@@ -1,0 +1,16 @@
+models:
+  - name: llama-3.1-8b-instruct
+    hf_repo: meta-llama/Llama-3.1-8B-Instruct
+    type: base
+
+  - name: mistral-7b-instruct
+    hf_repo: mistralai/Mistral-7B-Instruct-v0.3
+    type: base
+
+  - name: qwen-2.5-7b-instruct
+    hf_repo: Qwen/Qwen2.5-7B-Instruct
+    type: base
+
+  - name: deepseek-r1-distill-7b
+    hf_repo: deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
+    type: base

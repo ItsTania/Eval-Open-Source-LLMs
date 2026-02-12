@@ -1,0 +1,46 @@
+# Task definitions — each task maps to an Inspect Evals package path + optional args
+tasks:
+  mmlu_0shot:
+    inspect_path: inspect_evals/mmlu
+    args: {}
+
+  mmlu_5shot:
+    inspect_path: inspect_evals/mmlu
+    args:
+      fewshot: 5
+
+  gsm8k:
+    inspect_path: inspect_evals/gsm8k
+    args: {}
+
+  humaneval:
+    inspect_path: inspect_evals/humaneval
+    args: {}
+
+  arc_challenge:
+    inspect_path: inspect_evals/arc
+    args:
+      dataset: challenge
+
+  hellaswag:
+    inspect_path: inspect_evals/hellaswag
+    args: {}
+
+  gpqa_diamond:
+    inspect_path: inspect_evals/gpqa
+    args:
+      subset: diamond
+
+# Suites — named groups of tasks
+suites:
+  quick:
+    tasks: [mmlu_0shot, gsm8k]
+    description: "Fast sanity check"
+
+  standard:
+    tasks: [mmlu_0shot, gsm8k, humaneval, arc_challenge]
+    description: "Standard benchmark suite"
+
+  full:
+    tasks: [mmlu_0shot, mmlu_5shot, gsm8k, humaneval, arc_challenge, hellaswag, gpqa_diamond]
+    description: "Comprehensive evaluation"
