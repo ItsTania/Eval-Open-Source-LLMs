@@ -4,10 +4,18 @@ Evaluate open-source LLMs (Llama, Mistral, Qwen, DeepSeek, etc.) using [Inspect 
 
 ## Pipeline
 
+**Option 1:** Upload weights and run evals via W&B UI
 ```
-1. Upload weights  ──>  2. Host on CoreWeave  ──>  3. Run evals
-   (scripts/               (W&B Inference)          (Inspect AI +
-    upload_weights.py)                                W&B Launch)
+1. Upload weights  ──>  Run eval job via W&B UI
+   (scripts/
+    upload_weights.py)
+```
+
+**Option 2:** Use W&B Inference endpoint and run evals locally
+```
+2. Verify endpoint  ──>  3. Run evals locally
+   (scripts/                (scripts/
+    deploy_model.py)         run_evals.py)
 ```
 
 ## Setup
@@ -24,7 +32,15 @@ Required environment variables (`.env`):
 - `WANDB_PROJECT` — project name (default: `eval-os-llms`)
 - `HF_TOKEN` — HuggingFace token (for gated models like Llama)
 
-## Step 1: Upload Model Weights
+## Running Evals
+
+There are two ways to run evals:
+
+1. Use W&B Inference (backed by CoreWeave) to serves models via an OpenAI-compatible API then run the model locally. (Script 1)
+
+2. Upload model weight (after training etc etc) to wandb as a VLLM artifact then run a evaluation job on W&B (backed by CoreWeave)
+
+## Script 1: Upload Model Weights
 
 Upload open-source model weights from HuggingFace to the W&B Model Registry:
 
@@ -41,7 +57,7 @@ python scripts/upload_weights.py --lora-path ./my-lora --base-model OpenPipe/Qwe
 
 Models are defined in `configs/models.yaml`.
 
-## Step 2: Verify Model Endpoint
+## Script 2: Verify Model Endpoint
 
 W&B Inference (backed by CoreWeave) serves models via an OpenAI-compatible API:
 
@@ -53,9 +69,7 @@ python scripts/deploy_model.py --list
 python scripts/deploy_model.py --model-id meta-llama/Llama-3.1-8B-Instruct
 ```
 
-## Step 3: Run Evals
-
-### Option A: Local Inspect AI (results auto-log to W&B)
+## Script 3: Run Evals (results auto-log to W&B)
 
 ```bash
 # Run a predefined suite
@@ -67,17 +81,6 @@ python scripts/run_evals.py --model-id meta-llama/Llama-3.1-8B-Instruct --tasks 
 # Run all models against a suite
 python scripts/run_evals.py --all-models --suite standard
 ```
-
-### Option B: W&B Launch UI (CoreWeave-managed GPU)
-
-W&B's built-in LLM Evaluation Jobs run benchmarks on CoreWeave GPUs with automatic leaderboard generation:
-
-```bash
-# Print step-by-step instructions
-python scripts/run_evals.py --model-id meta-llama/Llama-3.1-8B-Instruct --mode launch
-```
-
-Or go directly to **W&B > Launch > Evaluate hosted API model** in the web UI.
 
 ## Configuration
 
@@ -115,7 +118,7 @@ configs/
 scripts/
   upload_weights.py        # Step 1: Upload to W&B Registry
   deploy_model.py          # Step 2: Verify W&B Inference endpoint
-  run_evals.py             # Step 3: Run evals (local or launch)
+  run_evals.py             # Step 3: Run evals
 evals/
   example_inspect_task.py  # Example custom Inspect AI task
   example_custom_weave_scorers.py  # Example W&B Weave scorers

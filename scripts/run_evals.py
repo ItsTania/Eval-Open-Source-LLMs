@@ -1,10 +1,5 @@
-"""Step 3: Run evaluations against a hosted model.
-
-Two modes:
-  1. "local"  — Run Inspect AI evals locally, hitting the W&B Inference endpoint.
+"""Step 3: Run Inspect AI evals locally, hitting the W&B Inference endpoint.
                 Results auto-log to W&B via inspect_wandb.
-  2. "launch" — Print the W&B Launch UI instructions to trigger built-in eval jobs
-                with CoreWeave-managed compute (UI-only for now).
 
 Usage:
     # Run evals locally via Inspect AI
@@ -16,8 +11,6 @@ Usage:
     # Run all configured models against a suite
     python scripts/run_evals.py --all-models --suite standard
 
-    # Show W&B Launch UI instructions instead
-    python scripts/run_evals.py --model-id meta-llama/Llama-3.1-8B-Instruct --mode launch
 """
 
 import argparse
@@ -62,12 +55,12 @@ def resolve_tasks(task_names: list[str], config: dict) -> list[dict]:
 
 def run_inspect_eval(model_id: str, task: dict, base_url: str) -> bool:
     """Run a single Inspect AI eval task against the W&B Inference endpoint."""
-    model_spec = f"openai-api/wandb/{model_id}"
+    model_spec = f"openai/{model_id}" # Uses the OpenAI API
 
     cmd = [
         "inspect", "eval", task["inspect_path"],
         "--model", model_spec,
-        "-M", f"base_url={base_url}",
+        "--model-base-url", base_url,
         "-M", f"api_key={os.getenv('WANDB_API_KEY', '')}",
     ]
 
@@ -114,46 +107,6 @@ def run_local(model_ids: list[str], tasks: list[dict], base_url: str):
     print("Run 'inspect view' to browse detailed logs locally.")
 
 
-def print_launch_instructions(model_ids: list[str], entity: str, project: str):
-    """Print instructions for using W&B Launch UI to run built-in eval jobs."""
-    print("""
-╔══════════════════════════════════════════════════════════════╗
-║  W&B Launch — Built-in Eval Jobs (CoreWeave-managed GPU)    ║
-╠══════════════════════════════════════════════════════════════╣
-║                                                              ║
-║  The W&B LLM Evaluation Jobs feature runs benchmarks on     ║
-║  CoreWeave GPUs with automatic leaderboard generation.      ║
-║  This is currently triggered via the W&B web UI.            ║
-║                                                              ║
-╚══════════════════════════════════════════════════════════════╝
-
-Steps:
-  1. Go to https://wandb.ai/{entity}/{project}
-  2. Click "Launch" in the left navigation
-  3. Choose one of:
-     a) "Evaluate model checkpoint" — for W&B artifact weights
-     b) "Evaluate hosted API model" — for the W&B Inference endpoint
-
-  For "Evaluate hosted API model":
-    - Base URL: {base_url}
-    - Model format: openai/<model-id>
-    - API Key: use your WANDB_API_KEY as a team secret
-
-  Models to evaluate:""".format(
-        entity=entity or "<your-entity>",
-        project=project or "eval-os-llms",
-        base_url=WANDB_INFERENCE_BASE_URL,
-    ))
-
-    for model_id in model_ids:
-        print(f"    - {model_id}")
-
-    print("""
-  4. Select up to 4 benchmarks (MMLU, GSM8K, HumanEval, etc.)
-  5. Click "Launch"
-  6. Results appear in the project leaderboard automatically
-""")
-
 
 def main():
     parser = argparse.ArgumentParser(description="Run evals against hosted models")
@@ -161,8 +114,6 @@ def main():
     parser.add_argument("--all-models", action="store_true", help="Run against all models in config")
     parser.add_argument("--suite", help="Eval suite name (quick, standard, full)")
     parser.add_argument("--tasks", nargs="+", help="Specific task names to run")
-    parser.add_argument("--mode", choices=["local", "launch"], default="local",
-                        help="'local' runs Inspect AI locally; 'launch' prints W&B UI instructions")
     parser.add_argument("--base-url", default=WANDB_INFERENCE_BASE_URL, help="Model API base URL")
     parser.add_argument("--models-config", default="configs/models.yaml")
     parser.add_argument("--suites-config", default="configs/eval_suites.yaml")
@@ -179,11 +130,8 @@ def main():
     else:
         parser.error("Provide --model-id or --all-models")
 
-    if args.mode == "launch":
-        print_launch_instructions(model_ids, args.entity, args.project)
-        return
 
-    # Local mode — need tasks
+    # Inspect tasks
     config = load_config(args.suites_config)
 
     if args.suite:

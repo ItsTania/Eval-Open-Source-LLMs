@@ -1,5 +1,6 @@
 inspect-ai
 inspect-wandb[weave]
+inspect_evals
 wandb
 openai
 huggingface-hub

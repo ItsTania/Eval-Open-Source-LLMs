@@ -30,10 +30,10 @@ tasks:
     inspect_path: inspect_evals/gpqa
     args:
       subset: diamond
-  tasks:
-    example_custom_qa:
-      inspect_path: evals/example_inspect_task.py@example_custom_qa
-      args: {}
+
+  example_custom_qa:
+    inspect_path: evals/example_inspect_task.py@example_custom_qa
+    args: {}
 
 # Suites — named groups of tasks
 suites:
