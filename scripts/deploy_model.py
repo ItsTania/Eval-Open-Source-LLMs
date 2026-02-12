@@ -27,15 +27,19 @@ WANDB_INFERENCE_BASE_URL = "https://api.inference.wandb.ai/v1"
 WANDB_API_KEY = os.getenv("WANDB_API_KEY")
 
 
-def get_client(entity: str = None, project: str = None) -> OpenAI:
+def get_client(entity: str, project: str) -> OpenAI:
     """Create an OpenAI client pointed at W&B Inference."""
-    kwargs = {
-        "api_key": WANDB_API_KEY,
-        "base_url": WANDB_INFERENCE_BASE_URL,
-    }
-    if entity and project:
-        kwargs["project"] = f"{entity}/{project}"
-    return OpenAI(**kwargs)
+    client =  OpenAI(
+        # The custom base URL points to W&B Inference
+        base_url=WANDB_INFERENCE_BASE_URL,
+
+        # API key from https://wandb.ai/authorize
+        api_key=WANDB_API_KEY,
+
+        # Optional: Team and project for usage tracking
+        project=f"{entity}/{project}",
+    )
+    return client
 
 
 def list_models(client: OpenAI):
@@ -65,8 +69,9 @@ def smoke_test(client: OpenAI, model_id: str):
     usage = response.usage
 
     print(f"Response: {reply}")
-    print(f"Tokens — prompt: {usage.prompt_tokens}, completion: {usage.completion_tokens}")
-    print(f"\nModel endpoint is working. Use this for evals:")
+    if usage is not None:
+        print(f"Tokens — prompt: {usage.prompt_tokens}, completion: {usage.completion_tokens}")
+        print("\nModel endpoint is working. Use this for evals:")
     print(f"  --model-id {model_id}")
     print(f"  --base-url {WANDB_INFERENCE_BASE_URL}")
 
