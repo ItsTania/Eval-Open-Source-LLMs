@@ -1,0 +1,7 @@
+inspect-ai
+inspect-wandb[weave]
+wandb
+openai
+huggingface-hub
+pyyaml
+python-dotenv
