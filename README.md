@@ -13,7 +13,7 @@ Evaluate open-source LLMs (Llama, Mistral, Qwen, DeepSeek, etc.) using [Inspect 
 
 **Option 2:** Use W&B Inference endpoint and run evals locally
 ```
-2. Verify endpoint  ──>  3. Run evals locally
+1. Verify endpoint  ──>  2. Run evals locally
    (scripts/                (scripts/
     deploy_model.py)         run_evals.py)
 ```
